@@ -143,7 +143,7 @@ function Assert-LocalProfilePackage([string]$Repo,$Manifest) {
 }
 
 function Assert-GuUsbManifest([string]$Repo,$Manifest) {
- if($Manifest.Format -isnot [int] -or $Manifest.Format -ne 2 -or
+ if(($Manifest.Format -isnot [int] -and $Manifest.Format -isnot [long]) -or $Manifest.Format -ne 2 -or
     $Manifest.Mode -cne 'single-rtx-headless-unlock-then-windows-usb' -or
     $Manifest.CanUnlock -isnot [bool] -or !$Manifest.CanUnlock -or
     $Manifest.RequiresHumanKey -isnot [bool] -or $Manifest.RequiresHumanKey -or
@@ -153,8 +153,19 @@ function Assert-GuUsbManifest([string]$Repo,$Manifest) {
  }
  $reviewed=@('ASUS-TUF-B650M-PLUS-WIFI-3057-RTX3090-FE','ASUS-TUF-GAMING-B660M-E-D4-4003-RTX3070TI','GIGABYTE-X870-AORUS-ELITE-WIFI7-F13d-RTX3090TI','ASUS-PRIME-B660-PLUS-D4-3010-RTX3060','GIGABYTE-H610M-H-FC-RTX3060-12GB')
  if($Manifest.HardwareProfile -isnot [string]){throw 'Missing USB hardware profile'}
+ if($Manifest.HardwareProfile -cne 'EXPERIMENTAL-GIGABYTE-Z690-UD-DDR4-F27-RTX3060-12GB'){
+  foreach($key in @('ExperimentalTreeSha256','ExperimentalEvidenceSha256')){
+   if((Get-LocalObjectNames $Manifest) -ccontains $key){throw 'Experimental package metadata cannot select another profile'}
+  }
+ }
  if($Manifest.HardwareProfile -cmatch '^LOCAL-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$') {
   Assert-LocalProfilePackage $Repo $Manifest
+ } elseif($Manifest.HardwareProfile -ceq 'EXPERIMENTAL-GIGABYTE-Z690-UD-DDR4-F27-RTX3060-12GB') {
+  foreach($key in @('LocalProfileHeaderSha256','LocalProfileTreeSha256','LocalProfileEvidenceSha256')){
+   if((Get-LocalObjectNames $Manifest) -ccontains $key){throw 'Local package metadata cannot select the experimental profile'}
+  }
+  . (Join-Path $Repo 'research/headless/z690-profile.ps1')
+  Assert-Z690Package $Repo $Manifest
  } elseif($reviewed -ccontains $Manifest.HardwareProfile) {
   foreach($key in @('LocalProfileHeaderSha256','LocalProfileTreeSha256','LocalProfileEvidenceSha256')){
    if((Get-LocalObjectNames $Manifest) -ccontains $key){throw 'Local package metadata cannot select a reviewed profile'}

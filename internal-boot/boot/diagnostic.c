@@ -141,7 +141,7 @@ static VOID Details(CAPTURE *c,EFI_HANDLE h,EFI_GUID *g) {
       Field(c," height=0x",gp->Mode->Info->VerticalResolution);
       Field(c," stride=0x",gp->Mode->Info->PixelsPerScanLine);End(c);
     } else {
-#if GU_CONSOLE_AGGREGATE || defined(GU_PROBE_GENERIC)
+#if GU_CONSOLE_AGGREGATE || defined(GU_PROBE_GENERIC) || defined(GU_PROFILE_PROBE_Z690UD_3060)
       /* Aggregate/pathless GOPs legitimately lack Mode->Info on this firmware;
          record it as an observation, not a capture failure (generic probe: topology unknown). */
       Field(c,"gop info-bytes=0x",gp->Mode->SizeOfInfo);End(c);

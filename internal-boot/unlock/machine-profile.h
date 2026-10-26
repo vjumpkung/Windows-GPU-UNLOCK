@@ -10,22 +10,22 @@
  */
 #pragma once
 
-#if (defined(GU_PROFILE_B650M_3090FE) + defined(GU_PROFILE_B660M_3070TI) + defined(GU_PROFILE_X870_3090TI) + defined(GU_PROFILE_B660PLUS_3060) + defined(GU_PROFILE_LOCAL) + defined(GU_PROFILE_H610M_3060) + defined(GU_PROFILE_PROBE_H610M_3060)) > 1
+#if (defined(GU_PROFILE_B650M_3090FE) + defined(GU_PROFILE_B660M_3070TI) + defined(GU_PROFILE_X870_3090TI) + defined(GU_PROFILE_B660PLUS_3060) + defined(GU_PROFILE_LOCAL) + defined(GU_PROFILE_H610M_3060) + defined(GU_PROFILE_PROBE_H610M_3060) + defined(GU_PROFILE_PROBE_Z690UD_3060) + defined(GU_PROFILE_Z690UD_3060)) > 1
 #error Select exactly one machine profile
 #endif
-#if !defined(GU_PROFILE_B650M_3090FE) && !defined(GU_PROFILE_B660M_3070TI) && !defined(GU_PROFILE_X870_3090TI) && !defined(GU_PROFILE_B660PLUS_3060) && !defined(GU_PROFILE_LOCAL) && !defined(GU_PROFILE_H610M_3060) && !defined(GU_PROFILE_PROBE_H610M_3060)
+#if !defined(GU_PROFILE_B650M_3090FE) && !defined(GU_PROFILE_B660M_3070TI) && !defined(GU_PROFILE_X870_3090TI) && !defined(GU_PROFILE_B660PLUS_3060) && !defined(GU_PROFILE_LOCAL) && !defined(GU_PROFILE_H610M_3060) && !defined(GU_PROFILE_PROBE_H610M_3060) && !defined(GU_PROFILE_PROBE_Z690UD_3060) && !defined(GU_PROFILE_Z690UD_3060)
 #define GU_PROFILE_B650M_3090FE 1
 #endif
 
 /* Probe-only identity: never a write profile. It selects the read-only probe
  * target and nothing else, so any build that could arm, release a driver or
  * unlock must fail to compile with it. */
-#if defined(GU_PROFILE_PROBE_H610M_3060)
+#if defined(GU_PROFILE_PROBE_H610M_3060) || defined(GU_PROFILE_PROBE_Z690UD_3060)
 #if !defined(GU_DIAGNOSTIC_PROBE) || (!defined(GU_DIAGNOSTIC_ONLY) && !defined(GU_PROBE_HOST_TEST))
-#error GU_PROFILE_PROBE_H610M_3060 is for the read-only diagnostic probe only
+#error Probe-only profile is for the read-only diagnostic probe only
 #endif
 #if defined(GU_FULL_UNLOCK) || defined(GU_EXPERIMENTAL_3090) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_HEADLESS_RESEARCH)
-#error GU_PROFILE_PROBE_H610M_3060 must not be combined with release or unlock builds
+#error Probe-only profile must not be combined with release or unlock builds
 #endif
 #endif
 
@@ -72,6 +72,51 @@
 #define GU_PROFILE_NAME "PROBE-ONLY-GIGABYTE-H610M-H-FC-RTX3060-12GB"
 #define GU_BOARD_ID 0x250410deU
 #define GU_BOARD_SUBSYSTEM 0x40961458U
+
+#elif defined(GU_PROFILE_PROBE_Z690UD_3060)
+
+/* Gigabyte Z690 UD, RTX 3060 (GA106): UNREVIEWED, probe-only PCI identity. */
+#define GU_PROFILE_NAME "probe-z690ud-3060"
+#define GU_BOARD_ID 0x250410deU
+#define GU_BOARD_SUBSYSTEM 0x153610deU
+
+#elif defined(GU_PROFILE_Z690UD_3060)
+
+/* EXPERIMENTAL, no physical unlock result. Z690 UD DDR4 BIOS F27,
+ * i5-12400F (no iGPU), GA106 RTX 3060 12GB. Three private read-only
+ * captures agree; one physical GOP and one nvgop display child.
+ * Write packaging requires matching host evidence (z690-profile.ps1).
+ * This is not a reviewed profile or an expansion of proven.json. */
+#if __STDC_HOSTED__ == 0 && (defined(GU_EXPERIMENTAL_3090) || defined(GU_FULL_UNLOCK)) && (!defined(GU_USB_MEDIA) || !defined(GU_HEADLESS_RESEARCH))
+#error Experimental Z690 write builds require the headless USB route
+#endif
+#define GU_PROFILE_NAME "EXPERIMENTAL-GIGABYTE-Z690-UD-DDR4-F27-RTX3060-12GB"
+#define GU_CONSOLE_CHILD_COUNT 1
+#define GU_BOARD_ID 0x250410deU
+#define GU_BOARD_SUBSYSTEM 0x153610deU
+#define GU_BAR0_BASE 0x53000000ULL
+#define GU_BAR0_END 0x53ffffffULL
+#define GU_DEVICE_MEMORY_SIZE 0x3000U
+#define GU_CHIP_ID 0xb76000a1U
+#define GU_PROM_SHA256 "444fd597a205115b6db796245605f58913d5018f61611e08582590f6fd6918a4"
+#define GU_ROOT_PORT_DEVICE 1U
+#define GU_ROOT_PORT_FUNCTION 0U
+#define GU_RTX_PATH_BYTES 2,1,12,0,0xd0,0x41,3,10,0,0,0,0,1,1,6,0,0,1,1,1,6,0,0,0,2,3,8,0,0x20,3,1,128,127,255,4,0
+#define GU_CONSOLE_TEXT_SIZE 0x5de0U
+#define GU_CONSOLE_TEXT_STOP 0xf90U
+#define GU_CONSOLE_TEXT_VERSION 0x10U
+#define GU_CONSOLE_GFX_SIZE 0x3c20U
+#define GU_CONSOLE_GFX_STOP 0xb60U
+#define GU_CONSOLE_GFX_VERSION 0x10U
+#define GU_EDID_IMAGE_SIZE 0x9000U
+#define GU_EDID_STOP 0x14d4U
+#define GU_EDID_TEXT_BYTES 0x3bb2U
+#define GU_EDID_TEXT_SHA256 "49fe68461765963d0b63144b0a7863f3b2db5926f1c988cbacc1e85ebe2b96f4"
+#define GU_NVGOP_VERSION 0x60010U
+#define GU_NVGOP_IMAGE_SIZE 0x26ae0U
+#define GU_NVGOP_STOP 0x678U
+#define GU_NVGOP_TEXT_BYTES 0x20d33U
+#define GU_NVGOP_TEXT_SHA256 "615b37a708b1894e18d7fa60cfcdacaa4d8b598863a10b8103d231a595847b2b"
 
 #elif defined(GU_PROFILE_H610M_3060)
 

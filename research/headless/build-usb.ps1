@@ -3,8 +3,9 @@
 # child accept only the USB device they were loaded from instead of a pinned internal
 # ESP GUID. Builds files only: no staging, boot entries or firmware settings change.
 param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
- [ValidateSet('b650m-3090fe','b660m-3070ti','x870-3090ti','b660plus-3060','h610m-3060','local')][string]$HardwareProfile='b650m-3090fe')
+ [ValidateSet('b650m-3090fe','b660m-3070ti','x870-3090ti','b660plus-3060','h610m-3060','z690ud-3060','local')][string]$HardwareProfile='b650m-3090fe')
 $profiles=@{
+ 'z690ud-3060'=@{Defines=@('-DGU_PROFILE_Z690UD_3060');Name='EXPERIMENTAL-GIGABYTE-Z690-UD-DDR4-F27-RTX3060-12GB'}
  'b650m-3090fe'=@{Defines=@('-DGU_PROFILE_B650M_3090FE');Name='ASUS-TUF-B650M-PLUS-WIFI-3057-RTX3090-FE'}
  'b660m-3070ti'=@{Defines=@('-DGU_PROFILE_B660M_3070TI');Name='ASUS-TUF-GAMING-B660M-E-D4-4003-RTX3070TI'}
  'x870-3090ti'=@{Defines=@('-DGU_PROFILE_X870_3090TI');Name='GIGABYTE-X870-AORUS-ELITE-WIFI7-F13d-RTX3090TI'}
@@ -23,6 +24,11 @@ if($HardwareProfile -eq 'local'){
  $hw=@{Defines=@($local.Define);Name=$local.Name}
 }
 else{$hw=$profiles[$HardwareProfile]}
+if($HardwareProfile -eq 'z690ud-3060'){
+ . (Join-Path $PSScriptRoot 'z690-profile.ps1')
+ $z690Evidence=Assert-Z690Evidence $repo
+ $z690EvidenceSha=Get-GuSha256 (Join-Path $repo 'research/profile/local/z690ud-3060/test-results.json')
+}
 function GuidC([guid]$Value){
  $b=$Value.ToByteArray();$tail=($b[8..15] | ForEach-Object {'0x{0:x2}' -f $_}) -join ','
  return ('{{0x{0:x8},0x{1:x4},0x{2:x4},{{{3}}}}}' -f [BitConverter]::ToUInt32($b,0),[BitConverter]::ToUInt16($b,4),[BitConverter]::ToUInt16($b,6),$tail)
@@ -66,6 +72,12 @@ try {
   $usbManifest.LocalProfileHeaderSha256=$local.HeaderSha256
   $usbManifest.LocalProfileTreeSha256=$localEvidence.TreeSha256
   $usbManifest.LocalProfileEvidenceSha256=$localEvidenceSha
+ }
+ if($HardwareProfile -eq 'z690ud-3060'){
+  $null=Assert-Z690Evidence $repo
+  if((Get-GuSha256 (Join-Path $repo 'research/profile/local/z690ud-3060/test-results.json')) -cne $z690EvidenceSha){throw 'Z690 test evidence changed during build'}
+  $usbManifest.ExperimentalTreeSha256=$z690Evidence.TreeSha256
+  $usbManifest.ExperimentalEvidenceSha256=$z690EvidenceSha
  }
  $usbManifest | ConvertTo-Json | Set-Content build/headless/usb-manifest.json -Encoding utf8
  Get-Content build/headless/usb-manifest.json

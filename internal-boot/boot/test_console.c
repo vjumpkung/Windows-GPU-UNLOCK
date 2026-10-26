@@ -207,6 +207,11 @@ static EFI_STATUS Run(int scenario) {
 #ifdef GU_SINGLE_RTX_CONSOLE
   RtxMode.Info=&RtxInfo;
 #endif
+#ifdef GU_SINGLE_DISPLAY_CHILD_TEST
+  RtxInfo.HorizontalResolution=FX_RTX_WIDTH;RtxInfo.VerticalResolution=FX_RTX_HEIGHT;RtxInfo.PixelsPerScanLine=FX_RTX_STRIDE;
+  RtxMode.FrameBufferBase=FX_RTX_FRAMEBUFFER;RtxMode.FrameBufferSize=FX_RTX_FRAMEBUFFER_BYTES;
+  RtxMode.Mode=FX_RTX_MODE;RtxMode.MaxMode=FX_RTX_MAX_MODE;
+#endif
   TextMode=(EFI_SIMPLE_TEXT_OUTPUT_MODE){0};Text.Mode=&TextMode;Text.OutputString=Output;
   Keys=(EFI_SIMPLE_TEXT_INPUT_PROTOCOL){0};Keys.ReadKeyStroke=ReadKey;Keys.WaitForKey=(VOID *)1;
 #ifdef GU_SINGLE_RTX_CONSOLE

@@ -11,6 +11,9 @@ from pathlib import Path
 
 source = Path(sys.argv[1])
 single = '--single-rtx' in sys.argv[2:]
+no_igpu = '--no-igpu' in sys.argv[2:]
+if no_igpu and not single:
+    raise ValueError('--no-igpu requires --single-rtx')
 def option(name, default):
     """--name=value override; defaults are the original B650M/3090 FE capture."""
     for arg in sys.argv[2:]:
@@ -45,7 +48,7 @@ def one(predicate):
     return indices[values[0]]
 roles = {
     'RtxPci': one(lambda b: f'pci config-dwords={rtx_id}' in b),
-    'AmdPci': one(lambda b: f'pci config-dwords={amd_id}' in b),
+    'AmdPci': 0 if no_igpu else one(lambda b: f'pci config-dwords={amd_id}' in b),
     'Rtx': one(lambda b: f'gop framebuffer={rtx_fb}' in b),
     'Amd': 0 if single else one(lambda b: 'gop framebuffer=0x000000fce0000000' in b),
 }
@@ -75,6 +78,14 @@ for role, value in zip(['Console', 'Error', 'Input'], console.groups()):
 lines = [f'/* Local diagnostic sha256 {hashlib.sha256(raw).hexdigest()} */', f'#define FX_HANDLES {len(blocks)}']
 for role, value in roles.items():
     lines.append(f'#define FX_{role} ((EFI_HANDLE){value})')
+if no_igpu:
+    block = blocks[next(h for h, i in indices.items() if i == roles['Rtx'])]
+    gop = re.search(r'gop framebuffer=(0x[0-9a-f]+) bytes=(0x[0-9a-f]+) mode=(0x[0-9a-f]+) max-mode=(0x[0-9a-f]+)', block)
+    info = re.search(r'gop width=(0x[0-9a-f]+) height=(0x[0-9a-f]+) stride=(0x[0-9a-f]+)', block)
+    if not gop or not info:
+        raise ValueError('Incomplete RTX GOP snapshot')
+    for name, value in zip(['FRAMEBUFFER', 'FRAMEBUFFER_BYTES', 'MODE', 'MAX_MODE', 'WIDTH', 'HEIGHT', 'STRIDE'], gop.groups() + info.groups()):
+        lines.append(f'#define FX_RTX_{name} {value}ULL')
 lines.append('static const EDGE FixtureEdges[]={')
 for h, a, c, g, attrs, count in edges:
     data = g.bytes
@@ -82,6 +93,11 @@ for h, a, c, g, attrs, count in edges:
     lines.append(f'{{(EFI_HANDLE){h},(EFI_HANDLE){a},(EFI_HANDLE){c},{guid},{attrs},{count}}},')
 lines.append('};')
 for role in ['Rtx', 'Amd']:
+    if role == 'Amd' and no_igpu:
+        # No handle or ownership records are invented for machines without an iGPU.
+        # Legacy mock code still references this unused config array.
+        lines.append('static const UINT32 FixtureAmdConfig[16]={0};')
+        continue
     block = blocks[next(h for h, i in indices.items() if i == roles[role + 'Pci'])]
     cfg = re.search(r'pci config-dwords=([^\n]+)', block)[1].split()
     if len(cfg) != 16:

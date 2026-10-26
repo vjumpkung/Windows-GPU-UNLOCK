@@ -9,13 +9,14 @@ param(
  [switch]$HeadlessResearch,
  [switch]$UsbMedia,
  [ValidateSet('original03100062','observed03000062','entryLatchedSs1Preserve','entryLatchedSs1Full')][string]$StockProfile,
- [ValidateSet('b650m-3090fe','b660m-3070ti','x870-3090ti','b660plus-3060','h610m-3060','local')][string]$HardwareProfile='b650m-3090fe'
+ [ValidateSet('b650m-3090fe','b660m-3070ti','x870-3090ti','b660plus-3060','h610m-3060','z690ud-3060','local')][string]$HardwareProfile='b650m-3090fe'
 )
 # Reviewed single-machine profiles; mirrors internal-boot/unlock/machine-profile.h.
 # A profile is fixed provenance: it selects constants compiled into the EFI,
 # never a user-editable switch. 'local' is this machine's generated profile-local.h,
 # write-eligible only with matching passing evidence (local-profile.ps1).
 $hwTable=@{
+ 'z690ud-3060'=[ordered]@{Define='-DGU_PROFILE_Z690UD_3060';Name='EXPERIMENTAL-GIGABYTE-Z690-UD-DDR4-F27-RTX3060-12GB';TargetPci='250410de';Subsystem='153610de';Chip='0xb76000a1';Prom='444fd597a205115b6db796245605f58913d5018f61611e08582590f6fd6918a4';Memory='0x3000';HeadlessOnly=$true;UsbOnly=$true}
  'b650m-3090fe'=[ordered]@{Define='-DGU_PROFILE_B650M_3090FE';Name='ASUS-TUF-B650M-PLUS-WIFI-3057-RTX3090-FE';TargetPci='220410de';Subsystem='145410de';Chip='0xb72000a1';Prom='8ea297373e9e5d3600ff41ad9fae88f2d14c98c017d100669f7333981da673b4';Memory='0x6000';HeadlessOnly=$false}
  'b660m-3070ti'=[ordered]@{Define='-DGU_PROFILE_B660M_3070TI';Name='ASUS-TUF-GAMING-B660M-E-D4-4003-RTX3070TI';TargetPci='248210de';Subsystem='50521462';Chip='0xb74000a1';Prom='f429aa1d5f0f18d11ed9a19503683a674fe3541ae77e959df8e732652c2b4df0';Memory='0x2000';HeadlessOnly=$true}
  'h610m-3060'=[ordered]@{Define='-DGU_PROFILE_H610M_3060';Name='GIGABYTE-H610M-H-FC-RTX3060-12GB';TargetPci='250410de';Subsystem='40961458';Chip='0xb76000a1';Prom='727dd8332f028783d3de2f81a707e4d9448c3238db6180271f3a8e9c03a808c9';Memory='0x3000';HeadlessOnly=$true;UsbOnly=$true}
@@ -39,6 +40,10 @@ try {
  if($hw.HeadlessOnly -and $ExperimentalUnlock -and !$HeadlessResearch){throw ('Profile '+$HardwareProfile+' only ships a headless write path; non-headless builds are diagnostic-only')}
  if($hw.UsbOnly -and $ExperimentalUnlock -and !$UsbMedia){throw ('Profile '+$HardwareProfile+' only ships the headless USB write path')}
  if($HardwareProfile -eq 'local' -and $ExperimentalUnlock){$evidence=Assert-LocalProfileEvidence $repo}
+ if($HardwareProfile -eq 'z690ud-3060' -and $ExperimentalUnlock){
+  . (Join-Path $repo 'research/headless/z690-profile.ps1')
+  $z690Evidence=Assert-Z690Evidence $repo
+ }
  if($AutomaticBoot -and (!$InternalBoot -or !$ExperimentalUnlock -or $StockProfile -ne 'entryLatchedSs1Full')){throw 'Automatic boot requires internal full experimental profile'}
  if($InternalBoot) {
   if(!$ExperimentalUnlock -or $StockProfile -ne 'entryLatchedSs1Full'){throw 'Internal boot requires the validated full experimental profile'}
@@ -81,6 +86,10 @@ try {
    if($afterEvidence.TreeSha256 -cne $evidence.TreeSha256 -or (Get-LocalProfile $repo).HeaderSha256 -cne $hw.HeaderSha256){throw 'Local inputs changed while building; rerun tests and rebuild'}
   }
   $manifest.LocalProfile=[ordered]@{HeaderSha256=$hw.HeaderSha256;Evidence=$(if($evidence){[ordered]@{TreeSha256=$evidence.TreeSha256;TestedUtc=$evidence.TestedUtc}}else{'none: diagnostic build'})}
+ }
+ if($HardwareProfile -eq 'z690ud-3060' -and $ExperimentalUnlock){
+  $null=Assert-Z690Evidence $repo
+  $manifest.ExperimentalTreeSha256=$z690Evidence.TreeSha256
  }
  $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 -LiteralPath "$out/build-manifest.json"
  "Built $name.EFI; ExperimentalUnlock=$([bool]$ExperimentalUnlock); hardware untested."

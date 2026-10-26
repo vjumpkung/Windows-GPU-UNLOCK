@@ -1,5 +1,15 @@
 # Changes
 
+## Unreleased — add RTX 3060 benchmark target
+
+- Add `benchmark/compute-benchmark-3060.cu`, identical to the 3090 source except that it
+  requires exactly `NVIDIA GeForce RTX 3060` at 0000:01:00.0. This is a measurement target
+  only, not an EFI compatibility verdict.
+- Accept `-Card 3060` in `build.ps1` / `run-benchmark.ps1` and the RTX 3060 name in
+  `compare_results.py`; extend runner and offline-comparison tests to the fourth card.
+- Add repo-root `BENCHMARK.en.md`: one before/after measurement pair around a logged
+  Z690 UD / RTX 3060 unlock boot; it makes no claim of proven unlock or causality.
+
 ## Unreleased — harden GA106 observation and integrate the fifth profile
 
 - Preserve current GA104/GA102 profiles, LOCAL gates, ownership checks and TF32 tools

@@ -94,7 +94,8 @@ class ComparisonTests(unittest.TestCase):
     def test_four_modes_for_every_supported_card(self):
         for card, gpu in [('3090', 'NVIDIA GeForce RTX 3090'),
                           ('3090ti', 'NVIDIA GeForce RTX 3090 Ti'),
-                          ('3070ti', 'NVIDIA GeForce RTX 3070 Ti')]:
+                          ('3070ti', 'NVIDIA GeForce RTX 3070 Ti'),
+                          ('3060', 'NVIDIA GeForce RTX 3060')]:
             with self.subTest(card=card):
                 before = Path(self.temp.name) / f'new-{card}-before'
                 after = Path(self.temp.name) / f'new-{card}-after'
@@ -181,7 +182,8 @@ class ComparisonTests(unittest.TestCase):
     def test_each_supported_card_uses_its_own_executable(self):
         for card, gpu in [('3090', 'NVIDIA GeForce RTX 3090'),
                           ('3090ti', 'NVIDIA GeForce RTX 3090 Ti'),
-                          ('3070ti', 'NVIDIA GeForce RTX 3070 Ti')]:
+                          ('3070ti', 'NVIDIA GeForce RTX 3070 Ti'),
+                          ('3060', 'NVIDIA GeForce RTX 3060')]:
             with self.subTest(card=card):
                 before = Path(self.temp.name) / f'{card}-before'
                 after = Path(self.temp.name) / f'{card}-after'

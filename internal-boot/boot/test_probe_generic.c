@@ -6,12 +6,15 @@
 
 enum {G_OK,G_UNKNOWN,G_BME,G_MEM_OFF,G_BAD_BAR,G_BAD_RESOURCE,G_CHANGED,G_MULTI,
       G_SHORT_WRITE,G_FLUSH,G_CLOSE,G_OTHER_BDF,G_PROTOCOL_CHANGED,G_CFG_FAIL,G_BAD_CHECKSUM,
-      G_EXISTING_PROM,G_EXISTING_IMG,G_DUMP_READ_ERROR};
+      G_EXISTING_PROM,G_EXISTING_IMG,G_DUMP_READ_ERROR,G_H610_SUBSYSTEM,G_Z690_SUBSYSTEM,
+      G_GOP_MISSING_INFO,G_GOP_NULL_MODE};
 static int Mode,RootCloses,RootOpens,ForeignOpens,SfsSearches,Dumps,ExistingWriteAttempts;
 static EFI_FILE_PROTOCOL DumpFile,ForeignRoot;
 static EFI_HANDLE BindingHandle=(VOID *)50,ImageHandle=(VOID *)51;
 static EFI_DRIVER_BINDING_PROTOCOL Binding;
 static EFI_LOADED_IMAGE_PROTOCOL Image;
+static EFI_GRAPHICS_OUTPUT_PROTOCOL Gop;
+static EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE GopMode;
 static UINT8 ImageBytes[512];
 static CAPTURE *ActiveCapture;
 static int Drifted,ReadsAfterDrift;
@@ -25,11 +28,17 @@ static EFI_STATUS EFIAPI GenericRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL
     if(n==64){
       v[1]=(Mode==G_BME)?6U:((Mode==G_MEM_OFF)?0U:2U);
       v[2]=0x030000a1;v[4]=GU_BAR0_BASE;
+      if(Mode==G_H610_SUBSYSTEM){v[0]=0x250410de;v[11]=0x40961458;}
+      if(Mode==G_Z690_SUBSYSTEM){v[0]=0x250410de;v[11]=0x153610de;}
       if(Mode==G_BAD_BAR)v[4]|=4U;
       if(Mode==G_CHANGED && S.CfgReads>1)v[11]^=1U;
       if(Mode==G_CFG_FAIL && S.CfgReads>1)return EFI_DEVICE_ERROR;
       if(ActiveCapture && S.CfgReads>1){memset(ActiveCapture->Buffer,'x',sizeof(ActiveCapture->Buffer)-1);ActiveCapture->Used=sizeof(ActiveCapture->Buffer)-1;}
     }
+  }
+  if(s==EFI_SUCCESS && w==EfiPciIoWidthUint32 && at==0x2c && n==1) {
+    if(Mode==G_H610_SUBSYSTEM)*(UINT32 *)data=0x40961458;
+    if(Mode==G_Z690_SUBSYSTEM)*(UINT32 *)data=0x153610de;
   }
   return s;
 }
@@ -71,9 +80,15 @@ static EFI_STATUS EFIAPI GenericHandle(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
   EFI_GUID wantImage=EFI_LOADED_IMAGE_PROTOCOL_GUID;
   if(h==BindingHandle && !memcmp(g,&WantBind,sizeof(*g))){*out=&Binding;return EFI_SUCCESS;}
   if(h==ImageHandle && !memcmp(g,&wantImage,sizeof(*g))){*out=&Image;return EFI_SUCCESS;}
+  if(h==GraphHandle && !memcmp(g,&WantGop,sizeof(*g))){*out=&Gop;return EFI_SUCCESS;}
   if(h==(VOID *)4 && !memcmp(g,&WantPci,sizeof(*g))){*out=&Pci;return EFI_SUCCESS;}
   if(Mode==G_PROTOCOL_CHANGED && h==PciHandle && S.PromAllocs){*out=NULL;return EFI_NOT_FOUND;}
   return Handle(h,g,out);
+}
+static EFI_STATUS EFIAPI GenericProtocols(EFI_HANDLE h,EFI_GUID ***out,UINTN *n) {
+  EFI_STATUS s=Protocols(h,out,n);
+  if(s==EFI_SUCCESS && (Mode==G_GOP_MISSING_INFO || Mode==G_GOP_NULL_MODE))(*out)[0]=&WantGop;
+  return s;
 }
 static EFI_STATUS EFIAPI DumpWrite(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *data) {
   (void)f;(void)data;Dumps++;if(Mode==G_SHORT_WRITE)(*n)--;return EFI_SUCCESS;
@@ -103,6 +118,9 @@ static void GenericSetup(int mode) {
   ExistingWriteAttempts=0;
   Pci.Pci.Read=GenericRead;Pci.GetBarAttributes=Bar;Pci.GetLocation=GenericLocation;
   Bs.LocateHandleBuffer=GenericLocate;Bs.HandleProtocol=GenericHandle;
+  Bs.ProtocolsPerHandle=GenericProtocols;
+  memset(&Gop,0,sizeof(Gop));memset(&GopMode,0,sizeof(GopMode));
+  Gop.Mode=Mode==G_GOP_NULL_MODE?NULL:&GopMode;
   memset(&Binding,0,sizeof(Binding));Binding.ImageHandle=ImageHandle;
   memset(&Image,0,sizeof(Image));Image.ImageBase=ImageBytes;Image.ImageSize=sizeof(ImageBytes);
   DumpFile=LogFile;DumpFile.Write=DumpWrite;DumpFile.Flush=DumpFlush;DumpFile.Close=DumpClose;
@@ -116,6 +134,21 @@ static EFI_STATUS GenericRun(int mode,BOOLEAN withRoot) {
   return s;
 }
 int main(void) {
+#if defined(GU_PROFILE_PROBE_Z690UD_3060)
+  Check(GenericRun(G_Z690_SUBSYSTEM,TRUE)==EFI_SUCCESS,"Z690 accepts 250410de/153610de");
+  Check(S.RegReads==16 && S.PromReads==PROM_DWORDS,"Z690 identity permits bounded MMIO and PROM reads");
+  Check(GenericRun(G_H610_SUBSYSTEM,TRUE)==EFI_NOT_READY,"Z690 rejects 250410de/40961458");
+  Check(S.RegReads==0 && S.PromReads==0,"Z690 rejected subsystem performs no MMIO or PROM reads");
+  Check(Logged("incomplete reason=probe-unreviewed-envelope"),"Z690 rejects the subsystem at the envelope");
+  Check(GenericRun(G_GOP_MISSING_INFO,TRUE)==EFI_SUCCESS,"Z690 tolerates GOP missing Mode->Info");
+  Check(Logged("gop info-bytes=0x0000000000000000") && Logged("capture-complete=1"),"Z690 records missing GOP info as an observation");
+  Check(GenericRun(G_GOP_NULL_MODE,TRUE)==EFI_NOT_READY,"Z690 rejects GOP null Mode");
+  Check(Logged("incomplete reason=gop-null-mode") && !Logged("capture-complete=1"),"Z690 null GOP Mode cannot complete capture");
+#elif defined(GU_PROFILE_H610M_3060) || defined(GU_PROFILE_PROBE_H610M_3060)
+  Check(GenericRun(G_Z690_SUBSYSTEM,TRUE)==EFI_NOT_READY,"H610 rejects 250410de/153610de");
+  Check(S.RegReads==0 && S.PromReads==0,"H610 rejected subsystem performs no MMIO or PROM reads");
+  Check(Logged("incomplete reason=probe-unreviewed-envelope"),"H610 rejects the Z690 subsystem at the envelope");
+#endif
   Check(GenericRun(G_OK,TRUE)==EFI_SUCCESS,"reviewed generic envelope succeeds");
   Check(S.RegReads==16 && S.PromReads==PROM_DWORDS,"reviewed generic capture reads bounded windows");
 #if defined(GU_PROBE_GENERIC) || defined(GU_PROBE_DUMP_PROM)
@@ -138,7 +171,7 @@ int main(void) {
   Check(RootOpens==0 && Dumps==0,"capture without root creates no dump");
   Check(GuCaptureGraph(&Table,&LogFile)==EFI_NOT_READY,"legacy graph API cannot inherit the last root");
   Check(RootOpens==0,"legacy API uses no stale root");
-#if defined(GU_PROBE_DUMP_PROM) || defined(GU_PROFILE_H610M_3060) || defined(GU_PROFILE_PROBE_H610M_3060)
+#if defined(GU_PROBE_DUMP_PROM) || defined(GU_PROFILE_H610M_3060) || defined(GU_PROFILE_PROBE_H610M_3060) || defined(GU_PROFILE_PROBE_Z690UD_3060)
   Check(GenericRun(G_EXISTING_IMG,TRUE)==EFI_NOT_READY,"existing image capture invalidates new capture");
   Check(ExistingWriteAttempts==0,"existing image capture is never opened for write");
   Check(GenericRun(G_DUMP_READ_ERROR,TRUE)==EFI_NOT_READY,"unreadable capture file fails closed");
